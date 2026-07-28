@@ -1,0 +1,19 @@
+[project]
+name = "fsnm"
+version = "0.1.0"
+description = "Functional Spectral-Newton Method"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=6.29",
+    "matplotlib>=3.10",
+    "nbconvert>=7.16",
+    "numpy>=2.0",
+    "scikit-learn>=1.6",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["fsnm"]
