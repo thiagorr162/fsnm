@@ -87,6 +87,8 @@ def _balance(phi_model, psi_model, phi, psi):
 
 def empirical_loss(phi, psi):
     """Empirical FSNM loss, up to its constant term."""
+    phi = np.asarray(phi).reshape(len(phi), -1)
+    psi = np.asarray(psi).reshape(len(psi), -1)
     n_samples = len(phi)
     sigma_phi = phi.T @ phi / n_samples
     sigma_psi = psi.T @ psi / n_samples

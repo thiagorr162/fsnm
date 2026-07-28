@@ -3,3 +3,4 @@ aux/
 .venv/
 *.egg-info/
 __pycache__/
+figures/
