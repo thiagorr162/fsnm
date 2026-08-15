@@ -8,6 +8,8 @@ dependencies = [
     "matplotlib>=3.10",
     "nbconvert>=7.16",
     "numpy>=2.0",
+    "pandas>=2.3",
+    "pyarrow>=21.0",
     "scikit-learn>=1.6",
 ]
 
