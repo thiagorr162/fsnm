@@ -10,6 +10,7 @@ RANK = 3
 N_TRAIN = 5_000
 N_VALIDATION = 2_000
 N_TEST = 2_000
+N_REFERENCE = 5_000
 N_ITERATIONS = 40
 NOISE_SCALE = 0.08
 N_PERMUTATIONS = 999
@@ -38,6 +39,14 @@ def scaled_factors(phi_model, psi_model, singular_values, x, y):
     phi = phi_model.predict(x[:, None]) * scale
     psi = psi_model.predict(y[:, None]) * scale
     return phi, psi
+
+
+def sample_reference(size, seed):
+    rng = np.random.default_rng(seed)
+    x = rng.uniform(-1, 1, size)
+    driver = rng.uniform(-1, 1, size)
+    y = driver**2 + NOISE_SCALE * rng.normal(size=size)
+    return x, y
 
 
 def fit_case(dependent, train_seed, validation_seed, test_seed):
@@ -96,6 +105,18 @@ independent = fit_case(
 )
 nonlinear = fit_case(True, train_seed=31, validation_seed=32, test_seed=33)
 
+x_reference, y_reference = sample_reference(N_REFERENCE, seed=24)
+phi_reference, psi_reference = scaled_factors(
+    independent["phi"],
+    independent["psi"],
+    independent["singular_values"],
+    x_reference,
+    y_reference,
+)
+independent_reference_kappa = 1 + np.sum(
+    phi_reference * psi_reference, axis=1
+)
+
 x_grid = np.linspace(-1, 1, 180)
 y_grid = np.linspace(-0.2, 1.2, 180)
 independent_kernel = centered_kernel(independent, x_grid, y_grid)
@@ -130,19 +151,19 @@ spectrum_limit = 1.08 * max(
 independent_figure, independent_axes = plt.subplots(
     1, 2, figsize=(8.5, 3.5), constrained_layout=True
 )
-image = independent_axes[0].imshow(
-    independent_kernel.T,
-    origin="lower",
-    extent=[x_grid.min(), x_grid.max(), y_grid.min(), y_grid.max()],
-    aspect="auto",
-    cmap="coolwarm",
-    vmin=-kernel_limit,
-    vmax=kernel_limit,
+independent_axes[0].hist(
+    independent_reference_kappa,
+    bins=35,
+    color="tab:blue",
+    alpha=0.85,
+    edgecolor="white",
 )
+independent_axes[0].axvline(1, color="black", linestyle="--", linewidth=1.5)
 independent_axes[0].set(
-    title=r"Estimated $\widehat\kappa-1$", xlabel="$x$", ylabel="$y$"
+    title="Density ratio on reference pairs",
+    xlabel=r"$\widehat\kappa(X^{\mathrm{ref}},Y^{\mathrm{ref}})$",
+    ylabel="Count",
 )
-independent_figure.colorbar(image, ax=independent_axes[0], shrink=0.85)
 independent_axes[1].bar(
     np.arange(1, RANK + 1), independent["singular_values"], color="tab:blue"
 )
