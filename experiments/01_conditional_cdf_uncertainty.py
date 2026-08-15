@@ -10,7 +10,6 @@ from fsnm import fit_fsnm
 SIGMAS = np.array([0.18, 0.16, 0.12])
 RANK = len(SIGMAS)
 N_TRAIN = 10_000
-N_REFERENCE = 10_000
 X_EVALUATION = np.array([-0.6, 0.0, 0.6])
 CDF_GRID = np.linspace(-1, 1, 301)
 SEED = 2026
@@ -82,17 +81,17 @@ def exact_conditional_cdf():
     )
 
 
-def estimated_conditional_cdf(model, y_reference):
+def estimated_conditional_cdf(model, y_marginal):
     phi, psi, singular_values = model
     phi_values = phi.predict(X_EVALUATION[:, None])
-    psi_values = psi.predict(y_reference[:, None])
+    psi_values = psi.predict(y_marginal[:, None])
     density_ratio = 1 + (
         phi_values * singular_values
     ) @ psi_values.T
     density_ratio = np.maximum(density_ratio, 0)
 
-    order = np.argsort(y_reference)
-    sorted_y = y_reference[order]
+    order = np.argsort(y_marginal)
+    sorted_y = y_marginal[order]
     sorted_weights = density_ratio[:, order]
     cumulative_weights = np.cumsum(sorted_weights, axis=1)
     cumulative_weights /= cumulative_weights[:, -1, None]
@@ -118,7 +117,6 @@ def fit_model(x_train, y_train, parameters, seed):
 def bootstrap_cdfs(
     x_train,
     y_train,
-    y_reference,
     parameters,
     n_bootstrap,
     rng,
@@ -128,17 +126,15 @@ def bootstrap_cdfs(
     )
     for bootstrap in range(n_bootstrap):
         training_indices = rng.integers(0, N_TRAIN, size=N_TRAIN)
-        reference_indices = rng.integers(
-            0, N_REFERENCE, size=N_REFERENCE
-        )
+        bootstrap_y = y_train[training_indices]
         model = fit_model(
             x_train[training_indices],
-            y_train[training_indices],
+            bootstrap_y,
             parameters,
             seed=0,
         )
         replicates[bootstrap] = estimated_conditional_cdf(
-            model, y_reference[reference_indices]
+            model, bootstrap_y
         )
         if (bootstrap + 1) % 25 == 0 or bootstrap + 1 == n_bootstrap:
             print(f"  completed {bootstrap + 1}/{n_bootstrap}")
@@ -213,8 +209,6 @@ def save_cdf_figure(
 
 def main(n_bootstrap):
     x_train, y_train = sample_joint(N_TRAIN, seed=12)
-    reference_rng = np.random.default_rng(123)
-    y_reference = reference_rng.uniform(-1, 1, N_REFERENCE)
 
     exact_cdf = exact_conditional_cdf()
     tree_model = fit_model(
@@ -224,17 +218,16 @@ def main(n_bootstrap):
         x_train, y_train, SPLINE_PARAMETERS, seed=0
     )
     tree_estimate = estimated_conditional_cdf(
-        tree_model, y_reference
+        tree_model, y_train
     )
     spline_estimate = estimated_conditional_cdf(
-        spline_model, y_reference
+        spline_model, y_train
     )
 
     print("Tree bootstrap")
     tree_replicates = bootstrap_cdfs(
         x_train,
         y_train,
-        y_reference,
         TREE_PARAMETERS,
         n_bootstrap,
         np.random.default_rng(SEED),
@@ -243,7 +236,6 @@ def main(n_bootstrap):
     spline_replicates = bootstrap_cdfs(
         x_train,
         y_train,
-        y_reference,
         SPLINE_PARAMETERS,
         n_bootstrap,
         np.random.default_rng(SEED),

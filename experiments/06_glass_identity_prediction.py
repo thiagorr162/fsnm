@@ -1,4 +1,4 @@
-"""Evaluate identity-functional RI prediction on a post-selection holdout."""
+"""Evaluate identity-functional RI prediction on a held-out test set."""
 
 import json
 from pathlib import Path
@@ -12,16 +12,9 @@ from fsnm import fit_fsnm
 
 
 TARGET = "refractive_index"
-SPLIT_SEED = 2027
+SPLIT_SEED = 2026
+VALIDATION_FRACTION = 0.15
 TEST_FRACTION = 0.15
-PARAMETERS = {
-    "rank": 10,
-    "n_iterations": 16,
-    "step_size": 0.1,
-    "max_depth": 5,
-    "min_samples_leaf": 50,
-    "seed": 0,
-}
 
 
 def load_data(path):
@@ -34,18 +27,34 @@ def load_data(path):
     return composition, response, composition_columns
 
 
-def split_fit_test(composition, response):
+def split_train_validation_test(composition, response):
     rng = np.random.default_rng(SPLIT_SEED)
     order = rng.permutation(len(response))
+    n_validation = int(np.ceil(VALIDATION_FRACTION * len(order)))
     n_test = int(np.ceil(TEST_FRACTION * len(order)))
-    test_indices = order[:n_test]
-    fit_indices = order[n_test:]
+    validation_indices = order[:n_validation]
+    test_indices = order[n_validation : n_validation + n_test]
+    train_indices = order[n_validation + n_test :]
     return (
-        composition[fit_indices],
-        response[fit_indices],
+        composition[train_indices],
+        response[train_indices],
+        composition[validation_indices],
+        response[validation_indices],
         composition[test_indices],
         response[test_indices],
     )
+
+
+def load_selected_parameters(path):
+    metadata = json.loads(path.read_text())
+    return {
+        "rank": metadata["selected_rank"],
+        "n_iterations": metadata["selected_iteration"],
+        "step_size": metadata["tree_parameters"]["step_size"],
+        "max_depth": metadata["selected_max_depth"],
+        "min_samples_leaf": metadata["selected_min_samples_leaf"],
+        "seed": metadata["tree_parameters"]["seed"],
+    }
 
 
 def identity_prediction(model, x, marginal_response):
@@ -181,14 +190,27 @@ def main():
     composition, response, composition_columns = load_data(
         package_directory / "data" / "refractive_index.parquet"
     )
-    x_fit, y_fit, x_test, y_test = split_fit_test(composition, response)
+    (
+        x_train,
+        y_train,
+        x_validation,
+        y_validation,
+        x_test,
+        y_test,
+    ) = split_train_validation_test(composition, response)
+    x_fit = np.concatenate([x_train, x_validation], axis=0)
+    y_fit = np.concatenate([y_train, y_validation], axis=0)
+    parameters = load_selected_parameters(
+        package_directory / "artifacts" / "glass_refractive_index_fsnm.json"
+    )
 
     print(
-        f"fitting fixed configuration on {len(y_fit)} observations; "
+        f"refitting selected configuration on {len(y_fit)} "
+        "training-plus-validation observations; "
         f"holding out {len(y_test)} observations",
         flush=True,
     )
-    model = fit_fsnm(x_fit, y_fit, **PARAMETERS)
+    model = fit_fsnm(x_fit, y_fit, **parameters)
     predicted, estimated_mass = identity_prediction(model, x_test, y_fit)
     baseline = np.full_like(y_test, y_fit.mean())
     metrics = regression_metrics(y_test, predicted)
@@ -207,11 +229,14 @@ def main():
     results = {
         "target": TARGET,
         "split_seed": SPLIT_SEED,
+        "validation_fraction": VALIDATION_FRACTION,
         "test_fraction": TEST_FRACTION,
+        "train_observations": len(y_train),
+        "validation_observations": len(y_validation),
         "fit_observations": len(y_fit),
         "test_observations": len(y_test),
         "composition_columns": composition_columns,
-        "parameters": PARAMETERS,
+        "parameters": parameters,
         "identity_prediction_metrics": metrics,
         "mean_baseline_metrics": baseline_metrics,
         "fit_response_mean": float(y_fit.mean()),

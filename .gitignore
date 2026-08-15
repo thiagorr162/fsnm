@@ -4,3 +4,4 @@ aux/
 *.egg-info/
 __pycache__/
 figures/
+artifacts/

@@ -4,9 +4,7 @@ version = "0.1.0"
 description = "Functional Spectral-Newton Method"
 requires-python = ">=3.12"
 dependencies = [
-    "ipykernel>=6.29",
     "matplotlib>=3.10",
-    "nbconvert>=7.16",
     "numpy>=2.0",
     "pandas>=2.3",
     "pyarrow>=21.0",

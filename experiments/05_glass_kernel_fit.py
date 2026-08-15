@@ -16,9 +16,10 @@ from fsnm import fit_fsnm
 TARGET = "refractive_index"
 SEED = 2026
 VALIDATION_FRACTION = 0.15
-RANK_CANDIDATES = (5, 10, 20)
-DEPTH_CANDIDATES = (2, 5, 10)
-LEAF_SIZE_CANDIDATES = (50, 100, 200)
+TEST_FRACTION = 0.15
+RANK_CANDIDATES = (10, 20)
+DEPTH_CANDIDATES = (5, 10)
+LEAF_SIZE_CANDIDATES = (100,)
 MAX_ITERATIONS = 100
 PATIENCE = 8
 N_JOBS = 4
@@ -42,17 +43,21 @@ def load_data(path):
     return composition, response, composition_columns, int((~plausible_response).sum())
 
 
-def split_train_validation(composition, response):
+def split_train_validation_test(composition, response):
     rng = np.random.default_rng(SEED)
     order = rng.permutation(len(response))
     n_validation = int(np.ceil(VALIDATION_FRACTION * len(order)))
+    n_test = int(np.ceil(TEST_FRACTION * len(order)))
     validation_indices = order[:n_validation]
-    train_indices = order[n_validation:]
+    test_indices = order[n_validation : n_validation + n_test]
+    train_indices = order[n_validation + n_test :]
     return (
         composition[train_indices],
         response[train_indices],
         composition[validation_indices],
         response[validation_indices],
+        composition[test_indices],
+        response[test_indices],
     )
 
 
@@ -229,23 +234,37 @@ def save_figure(selected, full_model, figure_path):
     axes[0].legend(frameon=False)
 
     locations = np.arange(1, len(singular_values) + 1)
-    axes[1].bar(locations, singular_values, color="tab:blue")
-    offset = 0.025 * singular_values.max()
-    for location, value, share in zip(locations, singular_values, shares):
-        axes[1].text(
-            location,
-            value + offset,
-            f"{100 * share:.1f}%",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
+    axes[1].bar(
+        locations,
+        singular_values,
+        color="tab:blue",
+        label="Singular value",
+    )
     axes[1].set(
         title="Full-data dependence spectrum",
         xlabel="Mode",
         ylabel="Singular value",
-        xticks=locations,
-        ylim=(0, 1.16 * singular_values.max()),
+        xlim=(0.25, len(singular_values) + 0.75),
+        ylim=(0, 1.08 * singular_values.max()),
+    )
+    energy_axis = axes[1].twinx()
+    energy_axis.plot(
+        locations,
+        np.cumsum(shares),
+        color="tab:orange",
+        marker="o",
+        markersize=2.8,
+        linewidth=1.4,
+        label="Cumulative energy",
+    )
+    energy_axis.set(ylabel="Cumulative energy", ylim=(0, 1.04))
+    handles_left, labels_left = axes[1].get_legend_handles_labels()
+    handles_right, labels_right = energy_axis.get_legend_handles_labels()
+    axes[1].legend(
+        handles_left + handles_right,
+        labels_left + labels_right,
+        frameon=False,
+        loc="center right",
     )
 
     figure.savefig(figure_path, dpi=220, bbox_inches="tight")
@@ -261,6 +280,7 @@ def save_artifacts(full_model, selected, candidates, composition_columns, direct
         "target": TARGET,
         "seed": SEED,
         "validation_fraction": VALIDATION_FRACTION,
+        "test_fraction": TEST_FRACTION,
         "composition_columns": composition_columns,
         "selected_rank": selected["rank"],
         "selected_max_depth": selected["max_depth"],
@@ -277,7 +297,7 @@ def save_artifacts(full_model, selected, candidates, composition_columns, direct
             * len(LEAF_SIZE_CANDIDATES)
         ),
         "tree_parameters": TREE_PARAMETERS,
-        "rank_candidates": [
+        "candidates": [
             {
                 "rank": candidate["rank"],
                 "max_depth": candidate["max_depth"],
@@ -310,15 +330,20 @@ def main():
     composition, response, composition_columns, n_discarded = load_data(
         package_directory / "data" / "refractive_index.parquet"
     )
-    x_train, y_train, x_validation, y_validation = split_train_validation(
-        composition, response
-    )
+    (
+        x_train,
+        y_train,
+        x_validation,
+        y_validation,
+        x_test,
+        y_test,
+    ) = split_train_validation_test(composition, response)
     selected, candidates = select_model(
         x_train,
         y_train,
         x_validation,
         y_validation,
-        package_directory / "artifacts" / "glass_kernel_search",
+        package_directory / "artifacts" / "glass_kernel_search_train_val_test",
         fit_pending=not arguments.use_completed,
     )
     full_model = fit_full_model(composition, response, selected)
@@ -338,6 +363,7 @@ def main():
     print(f"discarded response outliers: {n_discarded}")
     print(f"training observations: {len(y_train)}")
     print(f"validation observations: {len(y_validation)}")
+    print(f"test observations: {len(y_test)}")
     for candidate in candidates:
         print(
             f"rank {candidate['rank']}, depth={candidate['max_depth']}, "
