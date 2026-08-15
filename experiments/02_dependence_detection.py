@@ -7,18 +7,16 @@ from fsnm import empirical_loss, fit_fsnm
 
 
 RANK = 3
-N_TRAIN = 5_000
-N_VALIDATION = 2_000
-N_TEST = 2_000
-N_REFERENCE = 5_000
-N_ITERATIONS = 40
+N_TRAIN = 10_000
+N_VALIDATION = 4_000
+N_TEST = 4_000
+N_REFERENCE = 10_000
 NOISE_SCALE = 0.08
 N_PERMUTATIONS = 999
 SEED = 0
 
 FSNM_PARAMETERS = {
     "rank": RANK,
-    "n_iterations": N_ITERATIONS,
     "step_size": 0.1,
     "max_depth": 3,
     "min_samples_leaf": 300,
@@ -49,7 +47,13 @@ def sample_reference(size, seed):
     return x, y
 
 
-def fit_case(dependent, train_seed, validation_seed, test_seed):
+def fit_case(
+    dependent,
+    n_iterations,
+    train_seed,
+    validation_seed,
+    test_seed,
+):
     x_train, y_train = sample_case(N_TRAIN, train_seed, dependent)
     x_validation, y_validation = sample_case(
         N_VALIDATION, validation_seed, dependent
@@ -58,8 +62,14 @@ def fit_case(dependent, train_seed, validation_seed, test_seed):
     phi, psi, singular_values, history = fit_fsnm(
         x_train,
         y_train,
-        validation_data=(x_validation, y_validation),
+        n_iterations=n_iterations,
         **FSNM_PARAMETERS,
+    )
+    phi_validation, psi_validation = scaled_factors(
+        phi, psi, singular_values, x_validation, y_validation
+    )
+    validation_loss = float(
+        empirical_loss(phi_validation, psi_validation)
     )
     phi_test, psi_test = scaled_factors(
         phi, psi, singular_values, x_test, y_test
@@ -87,6 +97,7 @@ def fit_case(dependent, train_seed, validation_seed, test_seed):
         "psi": psi,
         "singular_values": singular_values,
         "history": history,
+        "validation_loss": validation_loss,
         "test_loss": test_loss,
         "dependence_score": observed_score,
         "permutation_p_value": permutation_p_value,
@@ -101,9 +112,19 @@ def centered_kernel(result, x_grid, y_grid):
 
 
 independent = fit_case(
-    False, train_seed=21, validation_seed=22, test_seed=23
+    False,
+    n_iterations=1,
+    train_seed=21,
+    validation_seed=22,
+    test_seed=23,
 )
-nonlinear = fit_case(True, train_seed=31, validation_seed=32, test_seed=33)
+nonlinear = fit_case(
+    True,
+    n_iterations=13,
+    train_seed=31,
+    validation_seed=32,
+    test_seed=33,
+)
 
 x_reference, y_reference = sample_reference(N_REFERENCE, seed=24)
 phi_reference, psi_reference = scaled_factors(
@@ -128,6 +149,7 @@ for name, result, kernel in [
 ]:
     print(name)
     print(f"  Pearson correlation: {result['pearson']:.4f}")
+    print(f"  Validation loss: {result['validation_loss']:.4f}")
     print(f"  Test loss: {result['test_loss']:.4f}")
     print(f"  Permutation p-value: {result['permutation_p_value']:.3f}")
     print(f"  Selected iteration: {result['history']['best_iteration']}")
