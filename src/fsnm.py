@@ -136,6 +136,7 @@ def fit_fsnm(
     psi_model = _TreeExpansion(rank, [(psi_learner, identity)])
 
     interaction_history = []
+    training_loss_history = []
     validation_history = []
     best_loss = np.inf
     best_models = None
@@ -195,6 +196,7 @@ def fit_fsnm(
         sigma_phi = phi.T @ phi / n_samples
         sigma_psi = psi.T @ psi / n_samples
         interaction_history.append(np.trace(sigma_phi @ sigma_psi))
+        training_loss_history.append(empirical_loss(phi, psi))
 
         if validation_data is not None:
             validation_loss = empirical_loss(
@@ -228,6 +230,7 @@ def fit_fsnm(
     validation_history = np.asarray(validation_history)
     history = {
         "interaction": np.asarray(interaction_history),
+        "training_loss": np.asarray(training_loss_history),
         "validation_loss": validation_history,
         "best_iteration": (
             int(np.argmin(validation_history)) + 1
