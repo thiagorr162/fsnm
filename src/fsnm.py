@@ -1,8 +1,10 @@
 """Functional Spectral-Newton Method with configurable weak learners."""
 
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import SplineTransformer
 from sklearn.tree import DecisionTreeRegressor
 
 
@@ -44,7 +46,9 @@ def _fit_learner(
     learner_type,
     max_depth,
     min_samples_leaf,
-    n_estimators,
+    n_knots,
+    spline_degree,
+    learner_ridge,
     seed,
 ):
     if learner_type == "tree":
@@ -55,19 +59,18 @@ def _fit_learner(
                 random_state=seed,
             )
         )
-    elif learner_type == "random_forest":
-        learner = MultiOutputRegressor(
-            RandomForestRegressor(
-                n_estimators=n_estimators,
-                max_depth=max_depth,
-                min_samples_leaf=min_samples_leaf,
-                random_state=seed,
-                n_jobs=-1,
-            )
+    elif learner_type == "linear_spline":
+        learner = make_pipeline(
+            SplineTransformer(
+                n_knots=n_knots,
+                degree=spline_degree,
+                include_bias=False,
+            ),
+            Ridge(alpha=learner_ridge),
         )
     else:
         raise ValueError(
-            "learner_type must be either 'tree' or 'random_forest'."
+            "learner_type must be either 'tree' or 'linear_spline'."
         )
     learner.fit(inputs, targets)
     return learner
@@ -131,7 +134,9 @@ def fit_fsnm(
     max_depth=3,
     min_samples_leaf=20,
     learner_type="tree",
-    n_estimators=100,
+    n_knots=10,
+    spline_degree=3,
+    learner_ridge=1e-3,
     seed=0,
     validation_data=None,
     patience=None,
@@ -150,7 +155,9 @@ def fit_fsnm(
         learner_type,
         max_depth,
         min_samples_leaf,
-        n_estimators,
+        n_knots,
+        spline_degree,
+        learner_ridge,
         seed,
     )
     psi_learner = _fit_learner(
@@ -159,7 +166,9 @@ def fit_fsnm(
         learner_type,
         max_depth,
         min_samples_leaf,
-        n_estimators,
+        n_knots,
+        spline_degree,
+        learner_ridge,
         seed + 1,
     )
     phi_model = _LearnerExpansion(rank, [(phi_learner, identity)])
@@ -190,7 +199,9 @@ def fit_fsnm(
             learner_type,
             max_depth,
             min_samples_leaf,
-            n_estimators,
+            n_knots,
+            spline_degree,
+            learner_ridge,
             seed + 2 * iteration + 2,
         )
         psi_model = psi_model.update(
@@ -207,7 +218,9 @@ def fit_fsnm(
             learner_type,
             max_depth,
             min_samples_leaf,
-            n_estimators,
+            n_knots,
+            spline_degree,
+            learner_ridge,
             seed + 2 * iteration + 3,
         )
         phi_model = phi_model.update(
