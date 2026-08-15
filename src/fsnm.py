@@ -1,12 +1,13 @@
-"""Functional Spectral-Newton Method with regression-tree weak learners."""
+"""Functional Spectral-Newton Method with configurable weak learners."""
 
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.tree import DecisionTreeRegressor
 
 
-class _TreeExpansion:
-    """Linear expansion of vector-valued regression-tree learners."""
+class _LearnerExpansion:
+    """Linear expansion of vector-valued regression learners."""
 
     def __init__(self, rank, terms):
         self.rank = rank
@@ -25,10 +26,10 @@ class _TreeExpansion:
             for base_learner, coefficient in self.terms
         ]
         terms.append((learner, step_size * newton_matrix))
-        return _TreeExpansion(self.rank, terms)
+        return _LearnerExpansion(self.rank, terms)
 
     def transform(self, matrix):
-        return _TreeExpansion(
+        return _LearnerExpansion(
             self.rank,
             [
                 (learner, coefficient @ matrix)
@@ -37,14 +38,37 @@ class _TreeExpansion:
         )
 
 
-def _fit_trees(inputs, targets, max_depth, min_samples_leaf, seed):
-    learner = MultiOutputRegressor(
-        DecisionTreeRegressor(
-            max_depth=max_depth,
-            min_samples_leaf=min_samples_leaf,
-            random_state=seed,
+def _fit_learner(
+    inputs,
+    targets,
+    learner_type,
+    max_depth,
+    min_samples_leaf,
+    n_estimators,
+    seed,
+):
+    if learner_type == "tree":
+        learner = MultiOutputRegressor(
+            DecisionTreeRegressor(
+                max_depth=max_depth,
+                min_samples_leaf=min_samples_leaf,
+                random_state=seed,
+            )
         )
-    )
+    elif learner_type == "random_forest":
+        learner = MultiOutputRegressor(
+            RandomForestRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                min_samples_leaf=min_samples_leaf,
+                random_state=seed,
+                n_jobs=-1,
+            )
+        )
+    else:
+        raise ValueError(
+            "learner_type must be either 'tree' or 'random_forest'."
+        )
     learner.fit(inputs, targets)
     return learner
 
@@ -106,6 +130,8 @@ def fit_fsnm(
     step_size=0.5,
     max_depth=3,
     min_samples_leaf=20,
+    learner_type="tree",
+    n_estimators=100,
     seed=0,
     validation_data=None,
     patience=None,
@@ -118,22 +144,26 @@ def fit_fsnm(
     identity = np.eye(rank)
     rng = np.random.default_rng(seed)
 
-    phi_learner = _fit_trees(
+    phi_learner = _fit_learner(
         x,
         rng.normal(size=(n_samples, rank)),
+        learner_type,
         max_depth,
         min_samples_leaf,
+        n_estimators,
         seed,
     )
-    psi_learner = _fit_trees(
+    psi_learner = _fit_learner(
         y,
         rng.normal(size=(n_samples, rank)),
+        learner_type,
         max_depth,
         min_samples_leaf,
+        n_estimators,
         seed + 1,
     )
-    phi_model = _TreeExpansion(rank, [(phi_learner, identity)])
-    psi_model = _TreeExpansion(rank, [(psi_learner, identity)])
+    phi_model = _LearnerExpansion(rank, [(phi_learner, identity)])
+    psi_model = _LearnerExpansion(rank, [(psi_learner, identity)])
 
     interaction_history = []
     training_loss_history = []
@@ -154,11 +184,13 @@ def fit_fsnm(
     for iteration in range(n_iterations):
         phi = phi_model.predict(x)
         sigma_phi = phi.T @ phi / n_samples + ridge * identity
-        conditional_phi = _fit_trees(
+        conditional_phi = _fit_learner(
             y,
             phi - phi.mean(axis=0),
+            learner_type,
             max_depth,
             min_samples_leaf,
+            n_estimators,
             seed + 2 * iteration + 2,
         )
         psi_model = psi_model.update(
@@ -169,11 +201,13 @@ def fit_fsnm(
 
         psi = psi_model.predict(y)
         sigma_psi = psi.T @ psi / n_samples + ridge * identity
-        conditional_psi = _fit_trees(
+        conditional_psi = _fit_learner(
             x,
             psi - psi.mean(axis=0),
+            learner_type,
             max_depth,
             min_samples_leaf,
+            n_estimators,
             seed + 2 * iteration + 3,
         )
         phi_model = phi_model.update(
