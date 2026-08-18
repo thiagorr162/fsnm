@@ -1,6 +1,7 @@
 """Functional Spectral-Newton Method with configurable weak learners."""
 
 import numpy as np
+from tqdm.auto import tqdm
 from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import make_pipeline
@@ -141,6 +142,7 @@ def fit_fsnm(
     validation_data=None,
     patience=None,
     ridge=1e-8,
+    verbose=False,
 ):
     """Fit FSNM and return singular functions, singular values, and history."""
     x = np.asarray(x).reshape(len(x), -1)
@@ -190,7 +192,8 @@ def fit_fsnm(
             len(y_validation), -1
         )
 
-    for iteration in range(n_iterations):
+    iterations = tqdm(range(n_iterations), disable=not verbose)
+    for iteration in iterations:
         phi = phi_model.predict(x)
         sigma_phi = phi.T @ phi / n_samples + ridge * identity
         conditional_phi = _fit_learner(
@@ -258,11 +261,18 @@ def fit_fsnm(
                 stale_iterations = 0
             else:
                 stale_iterations += 1
-                if (
-                    patience is not None
-                    and stale_iterations >= patience
-                ):
-                    break
+
+            iterations.set_postfix(
+                val_loss=f"{validation_loss:.4f}",
+                best=f"{best_loss:.4f}",
+                stale=stale_iterations,
+            )
+
+            if (
+                patience is not None
+                and stale_iterations >= patience
+            ):
+                break
 
     if best_models is not None:
         phi_model, psi_model = best_models
