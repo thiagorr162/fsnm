@@ -136,6 +136,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "scikit-learn" },
+    { name = "scipy" },
 ]
 
 [package.metadata]
@@ -145,6 +146,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3" },
     { name = "pyarrow", specifier = ">=21.0" },
     { name = "scikit-learn", specifier = ">=1.6" },
+    { name = "scipy", specifier = ">=1.14" },
 ]
 
 [[package]]
