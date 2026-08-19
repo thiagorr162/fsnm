@@ -21,7 +21,7 @@ VALIDATION_FRACTION = 0.15
 TEST_FRACTION = 0.15
 THRESHOLD = 1.8
 BATCH_SIZE = 500
-QUANTILE_LEVELS = [0.025, 0.05, 0.50, 0.95, 0.975]
+QUANTILE_LEVELS = [0.05, 0.15, 0.50, 0.85, 0.95]
 
 
 def load_data(path):
@@ -91,7 +91,7 @@ def reliability_bins(observed_binary, predicted_probability, n_bins=10):
 
 
 def save_figure(
-    y_test, q025, q05, q50, q95, q975,
+    y_test, q05, q15, q50, q85, q95,
     observed_exceedance, exceedance_probability, figure_path,
     n_interval_points=150, seed=0,
 ):
@@ -103,12 +103,12 @@ def save_figure(
     x_axis = np.arange(len(sample))
 
     axes[0].fill_between(
-        x_axis, q025[sample], q975[sample],
-        color="tab:blue", alpha=0.18, label="95% interval",
+        x_axis, q05[sample], q95[sample],
+        color="tab:blue", alpha=0.18, label="90% interval",
     )
     axes[0].fill_between(
-        x_axis, q05[sample], q95[sample],
-        color="tab:blue", alpha=0.35, label="90% interval",
+        x_axis, q15[sample], q85[sample],
+        color="tab:blue", alpha=0.35, label="70% interval",
     )
     axes[0].plot(
         x_axis, q50[sample], color="tab:blue", linewidth=1.3,
@@ -146,7 +146,6 @@ def save_figure(
 
 def main():
     package_directory = Path(__file__).resolve().parents[1]
-    project_directory = Path(__file__).resolve().parents[3]
 
     composition, response = load_data(
         package_directory / "data" / "refractive_index.parquet"
@@ -182,11 +181,11 @@ def main():
         exceedance_results[start:end] = exceedance
         print(f"processed {end}/{n_test}", flush=True)
 
-    q025, q05, q50, q95, q975 = quantile_results.T
+    q05, q15, q50, q85, q95 = quantile_results.T
+    coverage_70 = float(np.mean((y_test >= q15) & (y_test <= q85)))
     coverage_90 = float(np.mean((y_test >= q05) & (y_test <= q95)))
-    coverage_95 = float(np.mean((y_test >= q025) & (y_test <= q975)))
+    width_70 = float(np.mean(q85 - q15))
     width_90 = float(np.mean(q95 - q05))
-    width_95 = float(np.mean(q975 - q025))
 
     observed_exceedance = (y_test > THRESHOLD).astype(float)
     brier_score = float(np.mean((exceedance_results - observed_exceedance) ** 2))
@@ -195,11 +194,9 @@ def main():
         np.mean((climatological_rate - observed_exceedance) ** 2)
     )
 
-    figure_path = (
-        project_directory / "tex" / "figures" / "13_glass_conditional_queries.png"
-    )
+    figure_path = package_directory / "figures" / "13_glass_conditional_queries.png"
     save_figure(
-        y_test, q025, q05, q50, q95, q975,
+        y_test, q05, q15, q50, q85, q95,
         observed_exceedance, exceedance_results, figure_path,
     )
 
@@ -208,10 +205,10 @@ def main():
         "threshold": THRESHOLD,
         "quantile_levels": QUANTILE_LEVELS,
         "test_observations": n_test,
+        "coverage_70": coverage_70,
         "coverage_90": coverage_90,
-        "coverage_95": coverage_95,
+        "mean_interval_width_70": width_70,
         "mean_interval_width_90": width_90,
-        "mean_interval_width_95": width_95,
         "exceedance_brier_score": brier_score,
         "climatological_exceedance_rate": climatological_rate,
         "climatological_brier_score": climatological_brier,
@@ -220,10 +217,10 @@ def main():
     results_path = artifact_directory / "glass_conditional_queries_rank50.json"
     results_path.write_text(json.dumps(results, indent=2) + "\n")
 
+    print(f"70% interval coverage: {coverage_70:.4f} (nominal 0.70)")
     print(f"90% interval coverage: {coverage_90:.4f} (nominal 0.90)")
-    print(f"95% interval coverage: {coverage_95:.4f} (nominal 0.95)")
+    print(f"mean 70% interval width: {width_70:.4f}")
     print(f"mean 90% interval width: {width_90:.4f}")
-    print(f"mean 95% interval width: {width_95:.4f}")
     print(f"exceedance Brier score: {brier_score:.4f}")
     print(
         "climatological (base-rate) Brier score: "

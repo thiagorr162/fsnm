@@ -147,7 +147,6 @@ def save_figure(observed, predicted, fit_mean, metrics, figure_path):
 
 def main():
     package_directory = Path(__file__).resolve().parents[1]
-    project_directory = Path(__file__).resolve().parents[3]
     composition, response = load_data(
         package_directory / "data" / "refractive_index.parquet"
     )
@@ -176,7 +175,7 @@ def main():
     baseline_metrics = regression_metrics(y_test, baseline)
 
     figure_path = (
-        project_directory / "tex" / "figures" / "12_glass_identity_prediction.png"
+        package_directory / "figures" / "12_glass_identity_prediction.png"
     )
     save_figure(y_test, predicted, y_train.mean(), metrics, figure_path)
 
