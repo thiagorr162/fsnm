@@ -1,0 +1,35 @@
+program: src/rank3_sweep.py
+project: fsnm
+name: rank3-continuous
+method: random
+run_cap: 1000
+metric:
+  name: best_validation_loss
+  goal: minimize
+command:
+  - ${env}
+  - .venv/bin/python
+  - ${program}
+parameters:
+  learner_type:
+    values: [tree, linear_spline]
+  step_size:
+    distribution: log_uniform_values
+    min: 0.01
+    max: 0.5
+  max_depth:
+    distribution: int_uniform
+    min: 2
+    max: 6
+  min_samples_leaf:
+    distribution: log_uniform_values
+    min: 30
+    max: 1000
+  n_knots:
+    distribution: int_uniform
+    min: 4
+    max: 40
+  learner_ridge:
+    distribution: log_uniform_values
+    min: 0.000001
+    max: 10.0

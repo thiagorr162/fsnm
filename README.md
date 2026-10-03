@@ -116,3 +116,63 @@ The fresh full execution reports:
   `89.4%`, with widths `0.043`, `0.069`, and `0.126` RI units;
 - direct screening Brier score `0.0375`, versus `0.1156` for the
   training-rate climatological baseline.
+
+## Continuous rank-three W&B sweep
+
+Create a native W&B random sweep from the repository root:
+
+```bash
+.venv/bin/wandb login
+.venv/bin/wandb sweep --project fsnm sweeps/rank3.yaml
+```
+
+Copy the `ENTITY/fsnm/SWEEP_ID` printed by W&B, then start four agents:
+
+```bash
+SWEEP_ID=ENTITY/fsnm/SWEEP_ID
+for worker in 1 2 3 4; do
+  .venv/bin/wandb agent --count 250 "$SWEEP_ID" &
+done
+wait
+```
+
+The sweep is capped at 1,000 trials. Restart agents against the same sweep
+ID to continue assigning new trials after an interruption; completed runs
+stay in W&B, while interrupted trials are not resumed midway through fitting.
+W&B generates random configurations; their assignment order is not controlled
+by a local seed. Model and data seeds remain fixed, and each run records its
+configuration and source code so that individual fits can be reproduced.
+
+The search uses equally likely trees and cubic splines, log-uniform step
+sizes 0.01–0.5, tree depths 2–6, log-uniform leaf sizes 30–1000 rounded to
+integers, spline knots 4–40, and log-uniform spline ridge 1e-6–10. Only the
+parameters relevant to the chosen learner are passed to the estimator. Rank
+is three, model seed zero, and each agent uses one BLAS thread. Trials use
+the original 10,000-point training draw (seed 12), a fresh 4,000-point
+validation draw (seed 100), at most 200 iterations, and patience 30.
+
+W&B records training/validation curves, `best_validation_loss`, the selected
+iteration, spectrum, and numerical failures. Sort successful runs by
+`best_validation_loss` ascending to compare them. The estimator is unchanged.
+
+After all agents finish, select the validation winner and evaluate it once
+against the original 11-iteration model:
+
+```bash
+.venv/bin/python src/rank3_sweep.py --evaluate "$SWEEP_ID"
+```
+
+Evaluation uses 4,000 untouched joint observations (seed 101) and 20,000
+independent uniform kernel-evaluation pairs (seed 102). Trials never see these
+test sets. The command creates a separate W&B evaluation run containing test
+metrics and the kernel comparison image. It also saves `summary.json` and
+`kernel_comparison.png` to `artifacts/rank3_sweep/` for the final notebook cells.
+Relative `--output-dir` paths resolve from the repository root. Test improvement
+is measured, not guaranteed. The previous local manifest/log/leaderboard format
+is replaced by W&B tracking; existing local outputs are left on disk.
+
+One small trial can be checked without logging in or uploading data:
+
+```bash
+WANDB_MODE=offline .venv/bin/python src/rank3_sweep.py --smoke
+```
