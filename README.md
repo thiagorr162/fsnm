@@ -21,7 +21,7 @@ figure, copy it manually from `code/fsnm/figures/` to `tex/figures/`.
 
 ## Paper notebooks
 
-The six notebooks follow the experimental sections of the paper. Each one is
+The seven notebooks follow the experimental sections of the paper. Each one is
 an executable narrative containing its setup, reported metrics, and all
 figures for that block.
 
@@ -49,6 +49,11 @@ figures for that block.
    runs the complete restricted-family glass experiment and generates
    `11_glass_kernel_fit.png`, `12_glass_identity_prediction.png`, and
    `13_glass_conditional_queries.png`.
+7. `notebooks/07_balancing_ablation.ipynb`
+   compares balancing after every iteration with balancing only after the
+   final iteration on the rank-three problem, for the balancing paragraph of
+   the method section. It writes `artifacts/balancing_ablation.json`; no
+   figure is produced.
 
 The notebooks can be executed interactively or headlessly with `nbclient`.
 For example:
